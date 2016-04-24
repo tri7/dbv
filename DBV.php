@@ -47,19 +47,15 @@ class DBV
         } else {
             if (function_exists('apache_request_headers')) {
                 $headers = apache_request_headers();
-                $authorization = array_key_exists('HTTP_AUTHORIZATION', $headers)
-                    ? $headers['HTTP_AUTHORIZATION']
-                    : (array_key_exists('Authorization', $headers)?$headers['Authorization']:'');
+                $authorization = $headers['HTTP_AUTHORIZATION'];
             }
         }
 
-        if ($authorization) {
-            list($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW']) = explode(':', base64_decode(substr($authorization, 6)));
-        }
+        list($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW']) = explode(':', base64_decode(substr($authorization, 6)));
         if (strlen(DBV_USERNAME) && strlen(DBV_PASSWORD) && (!isset($_SERVER['PHP_AUTH_USER']) || !($_SERVER['PHP_AUTH_USER'] == DBV_USERNAME && $_SERVER['PHP_AUTH_PW'] == DBV_PASSWORD))) {
             header('WWW-Authenticate: Basic realm="DBV interface"');
             header('HTTP/1.0 401 Unauthorized');
-            echo __('Access denied');
+            echo _('Access denied');
             exit();
         }
     }
@@ -92,8 +88,148 @@ class DBV
 
     public function dispatch()
     {
+        //$this->_parseBinLogs();
+        if (!file_exists(DBV_META_PATH.DS."myrevisionrun")) {
+            file_put_contents(DBV_META_PATH."myrevisionrun", '');
+        }
+        if (!file_exists(DBV_META_PATH.DS."revision")) {
+            file_put_contents(DBV_META_PATH."revision", '');
+        }
+        if (!file_exists(DBV_REVISIONS_PATH.DS."lastsaved")) {
+            file_put_contents(DBV_REVISIONS_PATH.DS."lastsaved", json_encode(array()));
+        }
         $action = $this->_getAction() . "Action";
         $this->$action();
+    }
+
+    public function _getBinlog(){
+
+        $dateLastRun = file_get_contents(DBV_META_PATH . DS . 'myrevisionrun');
+
+        $filesArr = explode("\n",trim(file_get_contents(BIN_LOG.".index")));
+
+        /* no ficheiro index. MY_INITIALS_int = 0 default */
+        $currRev = $this->_getCurrentRevision(); 
+
+        /* dia de hoje a meia noite se nao houver revisoes nenhumas, ou data da ultima revisao implementada */
+        $dateRev = $this->_getDateLastRev($currRev); 
+
+        $t1 = explode("/", $filesArr[0]);
+        $t2 = array_pop($t1);
+
+        $binLogLoc = implode("/", $t1);
+        $data = '';
+
+        foreach (new DirectoryIterator($binLogLoc) as $fileInfo3) {
+
+            $fntime = $fileInfo3->getMTime();
+            
+            $fn = $fileInfo3->getFilename();
+
+            if (substr($fn,0,6) == 'binlog' && substr($fn,7) != 'index' && strtotime(trim($dateLastRun)) < $fntime) {
+
+                $comm = "mysqlbinlog -h ".DB_HOST." -u ".DB_USERNAME." -p".DB_PASSWORD." --database=".DB_NAME." --result-file='".BINLOG_OUTPUT_FOLDER.DS.TMP_OUTPUT_FILE."' --start-datetime='".$dateRev."' ".$fn;
+                exec($comm);
+                $data .= file_get_contents(BINLOG_OUTPUT_FOLDER.DS.TMP_OUTPUT_FILE);
+            }
+        }
+
+        // binlog.index
+        return $data;
+
+    }
+
+    public function _parseBinLogs(){
+
+        if (!file_exists(BINLOG_OUTPUT_FOLDER)) {
+            mkdir(BINLOG_OUTPUT_FOLDER);
+        }
+
+        $data = $this->_getBinlog();
+
+        if ($data == '') {
+            $this->_json('');
+        }
+
+        $lastRev = $this->_getLastRev(); /* MY_INITIALS_int = 0 default */
+
+        $lastRevIntTmp = explode("_", $lastRev);
+
+        $lastRevInt = strval($lastRevIntTmp[1]);
+
+        $str = implode("\n\n", $this->_parseOps($data));
+
+        file_put_contents(DBV_META_PATH . DS . 'myrevisionrun', date("Y-m-d H:i:s"));
+
+        mkdir(DBV_REVISIONS_PATH.DS.MY_INITIALS."_".($lastRevInt+1));
+
+        $f = file_put_contents(DBV_REVISIONS_PATH.DS.MY_INITIALS."_".($lastRevInt+1).DS."rev".($lastRevInt+1).".sql", $str);
+
+        $this->_setCurrentRevision(MY_INITIALS."_".($lastRevInt+1));
+
+        $this->_json($f);
+    }
+
+    public function _getLastRev(){
+
+        $lastRev = 0;
+        foreach (new DirectoryIterator(DBV_REVISIONS_PATH.DS) as $fileInfo) {
+            $fn = $fileInfo->getFilename();
+            if (intval(substr($fn,3)) > intval(substr($lastRev,3))) {
+                $lastRev = $fn;
+            }
+        }
+
+        return $lastRev;
+
+    }
+
+    public function _getDateLastRev($curRev){
+
+        if ($curRev == 0) {
+            $t = date("Y-m-d H:i:s",strtotime(DEFAULT_REV_DATE));
+            return $t;
+        }else{
+            $mTime = 0;
+            foreach (new DirectoryIterator(DBV_REVISIONS_PATH.DS.$curRev) as $fileInfo) {
+                $fn = $fileInfo->getFilename();
+                if (substr($fn, -3) == 'sql' && $fileInfo->getMTime() > $mTime) {
+                    $mTime = $fileInfo->getMTime();
+                }
+            }
+            return date("Y-m-d H:i:s",$mTime);
+
+        }
+    }
+
+    public function _parseOps($data=''){
+        $dados = explode("/*!*/;", $data);
+
+        $dataF = array();
+        $flag = 0;
+
+        $usedb = 0;
+
+        $dataF[] = "use `".DB_NAME."`;";
+        foreach ($dados as $key => $value) {
+            $alt = stripos($value,"alter");
+            $cre = stripos($value,"create");
+            $dro = stripos($value,"drop");
+            if ((($alt !== false && $alt >= 0) || ($cre !== false && $cre >= 0) || ($dro !== false && $dro >= 0))) {
+                if ($key > 0 && strpos($dados[$key-1],"error_code") !== false) {
+                    preg_match_all("error_code *= *[0-9]+", $dados[$key-1],$hitstmp);
+                    if (intval($hitstmp[0][0]) == 0) {
+                        $dataF[] = trim($value).";";
+                    }
+                }
+            }
+        }
+
+        //$str = implode("\n\n", $dataF);
+
+        //return $str;
+
+        return $dataF;
     }
 
     public function indexAction()
@@ -105,6 +241,13 @@ class DBV
         }
 
         $this->_view("index");
+    }
+
+    public function alteracoesAction(){
+
+        if ($this->_isXMLHttpRequest()) {
+            $this->_parseBinLogs();
+        }
     }
 
     public function schemaAction()
@@ -140,11 +283,22 @@ class DBV
 
     public function revisionsAction()
     {
-        $revisions = isset($_POST['revisions']) ? array_filter($_POST['revisions'], 'is_numeric') : array();
+        $revisions = isset($_POST['revisions']) ? $_POST['revisions'] : array();
         $current_revision = $this->_getCurrentRevision();
 
         if (count($revisions)) {
-            sort($revisions);
+
+            usort($revisions, function ($rev1,$rev2){
+                $rev1Val = intval(substr($rev1, 3));
+                $rev2Val = intval(substr($rev2, 3));
+                if ($rev1Val > $rev2Val) {
+                    return 1;
+                }elseif ($rev1Val < $rev2Val) {
+                    return -1;
+                }else{
+                    return 0;
+                }
+            });
 
             foreach ($revisions as $revision) {
                 $files = $this->_getRevisionFiles($revision);
@@ -158,7 +312,7 @@ class DBV
                     }
                 }
 
-                if ($revision > $current_revision) {
+                if (intval(substr($revision,3)) > $current_revision) {
                     $this->_setCurrentRevision($revision);
                 }
                 $this->confirm(__("Executed revision #{revision}", array('revision' => "<strong>$revision</strong>")));
@@ -183,7 +337,7 @@ class DBV
 
     public function saveRevisionFileAction()
     {
-        $revision = intval($_POST['revision']);
+        $revision = $_POST['revision'];
         if (preg_match('/^[a-z0-9\._]+$/i', $_POST['file'])) {
             $file = $_POST['file'];
         } else {
@@ -193,6 +347,7 @@ class DBV
         }
 
         $path = DBV_REVISIONS_PATH . DS . $revision . DS . $file;
+        
         if (!file_exists($path)) {
             $this->_404();
         }
@@ -204,6 +359,12 @@ class DBV
                 'error' => __("Couldn't write file: #{path}<br />Make sure the user running DBV has adequate permissions.", array('path' => "<strong>$path</strong>"))
             ));
         }
+
+        $lastSaved2 = json_decode(file_get_contents(DBV_REVISIONS_PATH.DS."lastsaved"),true);
+
+        $lastSaved2[$revision] = date("Y-m-d H:i:s");
+
+        file_put_contents(DBV_REVISIONS_PATH.DS."lastsaved", json_encode($lastSaved2));
 
         $this->_json(array('ok' => true, 'message' => __("File #{path} successfully saved!", array('path' => "<strong>$path</strong>"))));
     }
@@ -319,57 +480,72 @@ class DBV
         return $return;
     }
 
+    public function _parseFile($fileName = ''){
+        if (count(explode("_", $fileName)) == 1) {
+            return false;
+        }else{
+            $inic = substr($fileName, 0,2);
+            $ver = substr($fileName, 3);
+            if (!is_numeric($ver)) {
+                return false;
+            }else{
+                return true;
+            }    
+        }
+        
+    }
+
     protected function _getRevisions()
     {
         $return = array();
 
         foreach (new DirectoryIterator(DBV_REVISIONS_PATH) as $file) {
-            if ($file->isDir() && !$file->isDot() && is_numeric($file->getBasename())) {
+            if ($file->isDir() && !$file->isDot() && $this->_parseFile($file->getBasename()) /*&& is_numeric($file->getBasename())*/) {
                 $return[] = $file->getBasename();
             }
         }
 
-        rsort($return, SORT_NUMERIC);
-
+        // REVER????
+        usort($return, function($a,$b){
+                if (intval(substr($a, 3)) == intval(substr($b, 3))) {
+                    return 0;
+                }else if (intval(substr($a, 3)) < intval(substr($b, 3)) ) {
+                        return 1;
+                }else if(intval(substr($a, 3)) > intval(substr($b, 3)) ){
+                    return -1;
+                }
+            });
+        //rsort($return, SORT_NUMERIC);
         return $return;
+    }
+
+    protected function _getLastRevisionRun()
+    {
+        $file = DBV_META_PATH . DS . 'myrevisionrun';
+        $ver = strval(file_get_contents($file));
+        if ($ver !== '') {
+            return $ver;
+        }else{
+            return 0;
+        }
     }
 
     protected function _getCurrentRevision()
     {
-        switch (DBV_REVISION_STORAGE) {
-            case 'FILE':
-                $file = DBV_META_PATH . DS . 'revision';
-                if (file_exists($file)) {
-                    return intval(file_get_contents($file));
-                }
-                return 0;
-                break;
-            case 'ADAPTER':
-                return $this->_getAdapter()->getCurrentRevision();
-                break;
-            default:
-                $this->error("Incorrect revision storage specified");
-                break;
+        $file = DBV_META_PATH . DS . 'revision';
+        $ver = strval(file_get_contents($file));
+        if ($ver !== '' && file_exists(DBV_REVISIONS_PATH.DS.$ver)) {
+            return $ver;
+        }else{
+            return 0;
         }
     }
 
     protected function _setCurrentRevision($revision)
     {
-        switch (DBV_REVISION_STORAGE) {
-            case 'FILE':
-                $file = DBV_META_PATH . DS . 'revision';
-                if (!@file_put_contents($file, $revision)) {
-                    $this->error("Cannot write revision file");
-                }
-                break;
-            case 'ADAPTER':
-                if (!$this->_getAdapter()->setCurrentRevision($revision)){
-                    $this->error("Cannot save revision to DB");
-                }
-                break;
-            default:
-                $this->error("Incorrect revision storage specified");
-                break;
+        $file = DBV_META_PATH . DS . 'revision';
+        if (!@file_put_contents($file, $revision)) {
+            $this->error("Cannot write revision file");
         }
     }
 
@@ -429,7 +605,7 @@ class DBV
 
     protected function _json($data = array())
     {
-        header("Content-type: application/json");
+        header("Content-type: text/x-json");
         echo (is_string($data) ? $data : json_encode($data));
         exit();
     }

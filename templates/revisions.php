@@ -1,4 +1,19 @@
-<h2><?php echo __('Revisions'); ?></h2>
+<h2><?php echo __('Revisions&nbsp&nbsp&nbsp'); 
+//$rootf = dirname(__FILE__);
+$rootfarr = explode("/", DBV_ROOT_PATH);
+array_pop($rootfarr);
+$rootFolder = implode("/",$rootfarr);
+
+$gitout = array();
+$branch = trim(exec("git -C ".$rootFolder." branch",$gitout));
+foreach ($gitout as $key => $value) {
+	if ($value[0] == '*') {
+		$branch = trim(substr($value,1));
+		break;
+	}
+}
+echo ' Branch: '.$branch;
+?></h2>
 <?php if (isset($this->revisions) && count($this->revisions)) { ?>
 	<form method="post" action="" class="nomargin" id="revisions">
 		<div class="log"></div>
@@ -11,10 +26,20 @@
 				</tr>
 			</thead>
 			<tbody>
-				<?php foreach ($this->revisions as $revision) { ?>
-					<?php
-						$ran = $this->revision >= $revision;
-						$class = array();
+				<?php 
+
+				$class = array();
+
+				$lastSavedT = json_decode(file_get_contents(DBV_REVISIONS_PATH.DS."lastsaved"),true);
+
+				$lastSaved = is_null($lastSavedT)?array():$lastSavedT;
+
+				foreach ($this->revisions as $revision) { 
+
+						$revLastSaved = array_key_exists($revision, $lastSaved);
+
+						$ran = ($this->revision >= substr($revision,3)) || ( ($this->revision < substr($revision,3)) && (substr($revision, 0,2) == MY_INITIALS) || (substr($revision, 0,2) == MY_INITIALS && !$revLastSaved) );
+						
 						if ($ran) {
 							$class[] = 'ran';
 						}
@@ -42,6 +67,7 @@
 										<div id="revision-file-<?php echo $revision; ?>-<?php echo ++$i; ?>">
 											<div class="log"></div>
 											<div class="alert alert-info heading">
+												
 												<button data-role="editor-save" data-revision="<?php echo $revision; ?>" data-file="<?php echo $file; ?>" type="button" class="btn btn-mini btn-info pull-right" style="margin-top: -1px;"><?php echo __('Save file') ?></button>
 												<strong class="alert-heading"><?php echo $file; ?></strong>
 											</div>
@@ -59,7 +85,7 @@
 	</form>
 <?php } else { ?>
 	<div class="alert alert-info nomargin">
-		<?php echo __('No revisions in #{path}', array('path' => '<strong>' . DBV_REVISIONS_PATH . '</strong>')) ?>
+		<?php echo __('No revisions in #{path}', array('path' => '<strong>' . REVISIONS_PATH . '</strong>')) ?>
 	</div>
 <?php } ?>
 <script type="text/javascript">
@@ -100,10 +126,13 @@
 		});
 
 		$$('button[data-role="editor-save"]').invoke('observe', 'click', function (event) {
+			
 			var self = this;
 
 			var editor = this.up('.heading').next('textarea')['data-editor'];
 			var container = this.up('[id^="revision-file"]');
+			this.up('[class~="ran"]').checked = true;
+			this.up('[class~="ran"]').removeClassName('ran');
 
 			this.disable();
 
@@ -117,7 +146,6 @@
 				},
 				onSuccess: function (transport) {
 					self.enable();
-
 					var response = transport.responseText.evalJSON();
 
 					if (response.error) {
@@ -137,7 +165,7 @@
 			clear_messages(this);
 
 			if (!data.hasOwnProperty('revisions[]')) {
-				render_messages('error', this, "<?php echo __("You didn't select any revisions to run") ?>");
+				render_messages('error', this, "<?php echo __("You didnt select any revisions to run") ?>");
 				Effect.ScrollTo('log', {duration: 0.2});
 				return false;
 			}
@@ -154,7 +182,7 @@
                     var response = transport.responseText.evalJSON();
 
                     if (typeof response.error != 'undefined') {
-                        return APP.growler.error('<?php echo __('Error!'); ?>', response.error);
+                        return APP.growler.error('<?php echo _('Error!'); ?>', response.error);
                     }
 
                     if (response.messages.error) {
