@@ -1,0 +1,21 @@
+CREATE TABLE `produtos` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `titulo` varchar(100) DEFAULT NULL,
+  `status_id` tinyint(3) unsigned DEFAULT NULL,
+  `tipo_de_produto_id` tinyint(3) unsigned DEFAULT NULL,
+  `data_criacao` datetime NOT NULL,
+  `data_modificacao` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `fornecedor_id` mediumint(11) NOT NULL,
+  `versao_id` smallint(2) NOT NULL,
+  `comentarios` text,
+  PRIMARY KEY (`id`),
+  KEY `fk_produtos_status_de_produto1_idx` (`status_id`),
+  KEY `fk_produtos_tipos_de_produtos1_idx` (`tipo_de_produto_id`),
+  KEY `fk_produtos_versoes_gmedia1_idx` (`versao_id`),
+  KEY `fk_produtos_parceiros1_idx` (`fornecedor_id`),
+  KEY `forn_versao_idx` (`fornecedor_id`,`versao_id`),
+  CONSTRAINT `fk_produtos_parceiros1` FOREIGN KEY (`fornecedor_id`) REFERENCES `parceiros` (`parceiro_id`) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `fk_produtos_status_de_produto1` FOREIGN KEY (`status_id`) REFERENCES `status_de_produto` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `fk_produtos_tipos_de_produtos1` FOREIGN KEY (`tipo_de_produto_id`) REFERENCES `tipos_de_produtos` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `fk_produtos_versoes_gmedia1` FOREIGN KEY (`versao_id`) REFERENCES `versoes_gmedia` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8

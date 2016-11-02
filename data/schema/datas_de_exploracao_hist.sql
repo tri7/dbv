@@ -1,0 +1,20 @@
+CREATE TABLE `datas_de_exploracao_hist` (
+  `date_exp_in` datetime DEFAULT NULL,
+  `date_exp_out` datetime DEFAULT NULL,
+  `produto_id` int(10) unsigned NOT NULL,
+  `early_window` tinyint(1) DEFAULT '0',
+  `update_number` mediumint(11) unsigned NOT NULL,
+  `operacao` char(6) DEFAULT NULL,
+  `data_criacao_hist` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `data_envio` datetime DEFAULT NULL,
+  `mod_fields` varchar(100) NOT NULL DEFAULT '',
+  `ws_id` tinyint(3) unsigned NOT NULL,
+  `error` varchar(100) DEFAULT NULL,
+  `error_date` datetime DEFAULT NULL,
+  `statusprod` enum('APAGADO','DONE','OVERRIDE','ACTIVO') NOT NULL DEFAULT 'ACTIVO',
+  PRIMARY KEY (`update_number`,`mod_fields`,`produto_id`,`statusprod`),
+  KEY `fk_datas_produtos1_idx` (`produto_id`),
+  KEY `in_idx` (`date_exp_in`),
+  KEY `out_idx` (`date_exp_out`),
+  KEY `fk_datas_de_exploracao_hist_servicosweb1_idx` (`ws_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Tabela de histórico. Ou seja, os dados actuais estão na datas_de_exploracao. Tabela utilizada pelos servicos updates_clientes e trigger_ot'
