@@ -141,6 +141,8 @@ class DBV
 
             $bFile = substr(BIN_LOG, 0, -5).$fn;
 
+            /*.REVER $dateLastRun < $fntime !!!!! */
+
             if (substr($fn,0,6) == 'binlog' && substr($fn,7) != 'index' && $dateLastRun < $fntime) {
 
                 $comm = BINLOG_EXEC_LOC."mysqlbinlog -h ".DB_HOST." -u ".DB_USERNAME." -p".DB_PASSWORD." --database=".DB_NAME." --result-file='".BINLOG_OUTPUT_FOLDER.DS.TMP_OUTPUT_FILE."' --start-datetime='".$dateLastRun."' ".$bFile;
@@ -269,7 +271,7 @@ class DBV
     {
         if ($this->_getAdapter()) {
             $this->schema = $this->_getSchema();
-            $this->revisions = $this->_getRevisions();
+            $this->revisions = array_reverse($this->_getRevisions());
             
             $this->impRevs = $this->_getImpRevisions();
             $this->revision = $this->_getCurrentRevision();
@@ -323,22 +325,10 @@ class DBV
 
     public function revisionsAction()
     {
-        $revisions = isset($_POST['revisions']) ? $_POST['revisions'] : array();
+        $revisions = isset($_POST['revisions']) ? array_reverse($_POST['revisions']) : array();
         $current_revision = $this->_getCurrentRevision();
 
         if (count($revisions)) {
-
-            usort($revisions, function ($rev1,$rev2){
-                $rev1Val = intval(substr($rev1, 3));
-                $rev2Val = intval(substr($rev2, 3));
-                if ($rev1Val > $rev2Val) {
-                    return 1;
-                }elseif ($rev1Val < $rev2Val) {
-                    return -1;
-                }else{
-                    return 0;
-                }
-            });
 
             foreach ($revisions as $revision) {
                 $files = $this->_getRevisionFiles($revision);
@@ -352,11 +342,12 @@ class DBV
                     }
                 }
 
-                if (intval(substr($revision,3)) > $current_revision) {
-                    $this->_setCurrentRevision($revision);
-                }
+                $this->_setCurrentRevision($revision);
+
                 $this->confirm(__("Executed revision #{revision}", array('revision' => "<strong>$revision</strong>")));
             }
+
+            //$this->writeHistFile($revisions);
         }
 
         if ($this->_isXMLHttpRequest()) {
@@ -440,15 +431,17 @@ class DBV
         } catch (DBV_Exception $e) {
             $this->error(($e->getCode() ? "[{$e->getCode()}] " : '') . $e->getMessage());
         }
-    }
+    } 
 
     protected function _runFile($file)
     {
+
         $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
 
         switch ($extension) {
             case 'sql':
                 $content = file_get_contents($file);
+
                 if ($content === false) {
                     $this->error(__("Cannot open file #{file}", array('file' => "<strong>$file</strong>")));
                     return false;
@@ -456,13 +449,13 @@ class DBV
 
                 try {
                     $this->_getAdapter()->query($content);
-                    //$nameOldExt = $file->getBasename();
-                    //$nameOld = substr($nameOldExt, 0, -5);
-
-                    //rename($file->getBasename(), $nameOld."_".date('YmdHis').".sql");
-
+         
                     $xtmp = $this->impRevs;
-                    $xtmp[] = $file->getBasename();
+                    
+                    $bn = explode("/", $file);
+
+                    $xtmp[] = array('name'=>$bn[count($bn)-2],'date'=>Date('Ymdhis'));
+                    
                     $this->impRevs = $xtmp;
 
                     file_put_contents(IMPREVS, json_encode($this->impRevs));
@@ -582,17 +575,14 @@ class DBV
         $revsName = $this->array_2_column($this->impRevs,'name');
         $revsDate = $this->array_2_column($this->impRevs,'date');
 
-
         usort($return, function($a,$b) use ($revsName,$revsDate){
 
                 $revs = $this->impRevs;
-                
-                
 
-                $params_a = explode("_", $a['name']);
-                $params_b = explode("_", $b['name']);
+                $params_a = explode("_", $a);
+                $params_b = explode("_", $b);
 
-                $pos_a = array_search($a['name'], $revsName );
+                $pos_a = array_search($a, $revsName );
 
                 if ($params_a[1] == MY_INITIALS || ($params_a[1] != MY_INITIALS && $pos_a !== false)) {
                     $a_type = 'imprevs';
@@ -610,8 +600,8 @@ class DBV
                     $b_type = 'remrevs';
                 }
 
-
                 $c = array($a_type,$b_type);
+
                 switch ($c) {
                     case array('imprevs','remrevs'):
                         return -1;
@@ -620,18 +610,18 @@ class DBV
                         return 1;
                         break;
                     case array('imprevs','imprevs'):
-                        if ($a_dateImp < $b_dateImp) {
+                        if (strtotime($a_dateImp) < strtotime($b_dateImp)) {
                             return -1;
-                        }else if($a_dateImp > $b_dateImp){
+                        }else if(strtotime($a_dateImp) > strtotime($b_dateImp)){
                             return 1;
                         }else{
                             return 0;
                         }
                         break;
                     case array('remrevs','remrevs'):
-                        if ($params_a[2] < $params_b[2]) {
+                        if (strtotime($params_a[2]) < strtotime($params_b[2])) {
                             return -1;
-                        }else if($params_a[2] > $params_b[2]){
+                        }else if(strtotime($params_a[2]) > strtotime($params_b[2])){
                             return 1;
                         }else{
                             return 0;
@@ -640,7 +630,7 @@ class DBV
                 }
             });
 
-        
+        //var_dump($return);
 
         return $return;
 

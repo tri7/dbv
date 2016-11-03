@@ -20,7 +20,32 @@
                 </tr>
             </thead>
             <tbody>
-                
+                <?php foreach ($this->schema as $name => $flags) { ?>
+                    <tr>
+                        <td class="center">
+                            <input type="checkbox" name="schema[]" value="<?php echo $name; ?>" id="object-<?php echo $name; ?>" style="margin-top: 0;" />
+                        </td>
+                        <td>
+                            <label for="object-<?php echo $name; ?>">
+                                <?php echo $name; ?>
+                            </label>
+                        </td>
+                        <td style="text-align: center;" data-role="database">
+                            <?php if (isset($flags['database'])) { ?>
+                                <span class="label label-success"><?php echo __('YES'); ?></span>
+                            <?php } else { ?>
+                                <span class="label label-important"><?php echo __('NO'); ?></span>
+                            <?php } ?>
+                        </td>
+                        <td style="text-align: center;" data-role="disk">
+                            <?php if (isset($flags['disk'])) { ?>
+                                <span class="label label-success"><?php echo __('YES'); ?></span>
+                            <?php } else { ?>
+                                <span class="label label-important"><?php echo __('NO'); ?></span>
+                            <?php } ?>
+                        </td>
+                    </tr>
+                <?php } ?>
             </tbody>
         </table>
 
@@ -53,9 +78,10 @@
                 onSuccess: function (transport) {
 
                     if (this.getAttribute('data-role') == 'alteracoes') {
+                        alert("olaaa");
                         window.location.href = "http://localhost/nos-app/db_tools/";
                     }
-                    
+                    window.location.href = "http://localhost/nos-app/db_tools/";
                     form.enable();
                     
                     var response = transport.responseText.evalJSON();
