@@ -12,6 +12,7 @@ define('DB_NAME', 'abacus');
 
 /*.bin-log executable location */
 define('BINLOG_EXEC_LOC','/Applications/MAMP/Library/bin/');
+
 /* bin-logs file location */
 define('BIN_LOG', '/Applications/MAMP/logs/index');
 
@@ -50,6 +51,7 @@ define('DBV_ROOT_PATH', dirname(__FILE__));
 define('DBV_DATA_PATH', DBV_ROOT_PATH . DS . 'data');
 define('DBV_SCHEMA_PATH', DBV_DATA_PATH . DS . 'schema');
 define('DBV_REVISIONS_PATH', DBV_DATA_PATH . DS . 'revisions');
+define('IMPREVS', DBV_REVISIONS_PATH.DS."impRevs.json");
 define('DBV_META_PATH', DBV_DATA_PATH . DS . 'meta');
 
 ini_set('magic_quotes_gpc', 'Off');

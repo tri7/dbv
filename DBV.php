@@ -39,6 +39,7 @@ class DBV
     protected $_action = "index";
     protected $_adapter;
     protected $_log = array();
+    protected $impRevs = array();
 
     public function authenticate()
     {
@@ -94,10 +95,14 @@ class DBV
         if (!file_exists(DBV_META_PATH.DS.DB_NAME."_revision")) {
             file_put_contents(DBV_META_PATH.DB_NAME."_revision", '');
         }
+        if (!file_exists(IMPREVS)) {
+            file_put_contents(IMPREVS, json_encode(array()));
+        }
         if (!file_exists(DBV_REVISIONS_PATH.DS.DB_NAME."_lastsaved")) {
             file_put_contents(DBV_REVISIONS_PATH.DS.DB_NAME."_lastsaved", json_encode(array()));
         }
         $action = $this->_getAction() . "Action";
+        $this->impRevs = json_decode(file_get_contents(IMPREVS));
         $this->$action();
     }
 
@@ -174,11 +179,22 @@ class DBV
 
             $ts = date('YmdHis');
 
-            mkdir( DBV_REVISIONS_PATH.DS.DB_NAME."_".MY_INITIALS."_".$ts."_".$ts );
+            /* REVER ts !!!! NOW() NAO E' NECESSARIAMENTE A DATA DE IMPLEMENTACAO NA BD */
 
-            $f = file_put_contents(DBV_REVISIONS_PATH.DS.DB_NAME."_".MY_INITIALS."_".$ts."_".$ts.DS."revision_".$ts.".sql", $str);
+            mkdir( DBV_REVISIONS_PATH.DS.DB_NAME."_".MY_INITIALS."_".$ts );
 
-            $this->_setCurrentRevision(DB_NAME."_".MY_INITIALS."_".$ts."_".$ts);
+            $f = file_put_contents(DBV_REVISIONS_PATH.DS.DB_NAME."_".MY_INITIALS."_".$ts.DS."revision_".$ts.".sql", $str);
+
+            /* Add to revision to array $this->impRevs */
+            $xtmp = $this->impRevs;
+
+            $xtmp[] = array('name' => DB_NAME."_".MY_INITIALS."_".$ts, 'date' => $ts);
+
+            $this->impRevs = $xtmp;
+
+            file_put_contents(IMPREVS, json_encode($this->impRevs),FILE_APPEND);
+
+            $this->_setCurrentRevision(DB_NAME."_".MY_INITIALS."_".$ts);
 
             $this->_json($f);
         }else{
@@ -188,7 +204,7 @@ class DBV
 
 
     /* REVER!! */
-    public function _getLastRev(){
+    /*public function _getLastRev(){
 
         $lastRev = 0;
         foreach (new DirectoryIterator(DBV_REVISIONS_PATH.DS) as $fileInfo) {
@@ -200,7 +216,7 @@ class DBV
 
         return $lastRev;
 
-    }
+    }*/
 
     /*public function _getDateLastRev($curRev){
 
@@ -254,10 +270,17 @@ class DBV
         if ($this->_getAdapter()) {
             $this->schema = $this->_getSchema();
             $this->revisions = $this->_getRevisions();
+            
+            $this->impRevs = $this->_getImpRevisions();
             $this->revision = $this->_getCurrentRevision();
         }
 
         $this->_view("index");
+    }
+
+    public function _getImpRevisions(){
+        $data = json_decode(file_get_contents(IMPREVS));
+        return $data;
     }
 
     public function alteracoesAction(){
@@ -433,10 +456,17 @@ class DBV
 
                 try {
                     $this->_getAdapter()->query($content);
-                    $nameOldExt = $file->getBasename();
-                    $nameOld = substr($nameOldExt, 0, -5);
+                    //$nameOldExt = $file->getBasename();
+                    //$nameOld = substr($nameOldExt, 0, -5);
 
                     //rename($file->getBasename(), $nameOld."_".date('YmdHis').".sql");
+
+                    $xtmp = $this->impRevs;
+                    $xtmp[] = $file->getBasename();
+                    $this->impRevs = $xtmp;
+
+                    file_put_contents(IMPREVS, json_encode($this->impRevs));
+
                     return true;
                 } catch (DBV_Exception $e) {
                     $this->error("[{$e->getCode()}] {$e->getMessage()} in <strong>$file</strong>");
@@ -501,11 +531,11 @@ class DBV
         return $return;
     }
 
-    /* $fileName = DB_MYINITIALS_TS1_TS2 */
+    /* $fileName = DB_MYINITIALS_TS1 */
 
     public function _parseFile($fileName = ''){
         $arr = explode("_", $fileName);
-        if (count($arr) < 3) {
+        if (count($arr) != 3) {
             return false;
         }else{
             $db = $arr[0];
@@ -516,6 +546,25 @@ class DBV
         }
     }
 
+    function array_2_column($array = NULL, $key = NULL)
+    {
+        $output = array();
+
+        foreach ($array as $value) {
+
+            if (gettype($value) == 'object') {
+                $val2 = (array) $value;
+            }else{
+                $val2 = $value;
+            }
+
+            $output[] = $val2[$key];
+
+        }
+
+        return $output;
+    }
+
     protected function _getRevisions()
     {
 
@@ -524,45 +573,77 @@ class DBV
 
         foreach (new DirectoryIterator(DBV_REVISIONS_PATH) as $file) {
 
-            if ($file->isDir() && !$file->isDot() && $this->_parseFile($file->getBasename()) /*&& is_numeric($file->getBasename())*/) {
+            if ($file->isDir() && !$file->isDot() && $this->_parseFile($file->getBasename())) {
 
                 $return[] = $file->getBasename();
             }
         }
 
-        // REVER????
+        $revsName = $this->array_2_column($this->impRevs,'name');
+        $revsDate = $this->array_2_column($this->impRevs,'date');
 
-        usort($return, function($a,$b){
-                $params_a = explode("_", $a);
-                $params_b = explode("_", $b);
 
-                if (count($params_a) == 4 && count($params_b) == 4 && $params_a[4] == $params_a[4]) {
-                    return 0;
-                }else if (count($params_a) == 4 && count($params_b) == 4 && $params_a[4] < $params_b[4]) {
-                    return 1;
-                }else if(count($params_a) == 4 && count($params_b) == 4 && $params_a[4] > $params_b[4]){
-                    return -1;
+        usort($return, function($a,$b) use ($revsName,$revsDate){
+
+                $revs = $this->impRevs;
+                
+                
+
+                $params_a = explode("_", $a['name']);
+                $params_b = explode("_", $b['name']);
+
+                $pos_a = array_search($a['name'], $revsName );
+
+                if ($params_a[1] == MY_INITIALS || ($params_a[1] != MY_INITIALS && $pos_a !== false)) {
+                    $a_type = 'imprevs';
+                    $a_dateImp = $revsDate[$pos_a];
+                }else{
+                    $a_type = 'remrevs';
                 }
 
-                if (count($params_a) == 4 && count($params_b) == 3) {
-                    return 1;
+                $pos_b = array_search($b['name'], $revsName );
+
+                if ($params_b[1] == MY_INITIALS || ($params_b[1] != MY_INITIALS && $pos_b !== false)) {
+                    $b_type = 'imprevs';
+                    $b_dateImp = $revsDate[$pos_b];
+                }else{
+                    $b_type = 'remrevs';
                 }
 
-                if (count($params_a) == 3 && count($params_b) == 4) {
-                    return -1;
-                }
 
-                if (count($params_a) == 3 && count($params_b) == 3 && $params_a[3] == $params_a[4]) {
-                    return 0;
-                }else if (count($params_a) == 3 && count($params_b) == 3 && $params_a[3] < $params_a[3]) {
-                        return 1;
-                }else if (count($params_a) == 3 && count($params_b) == 3 && $params_a[3] > $params_a[3]) {
+                $c = array($a_type,$b_type);
+                switch ($c) {
+                    case array('imprevs','remrevs'):
                         return -1;
+                        break;
+                    case array('remrevs','imprevs'):
+                        return 1;
+                        break;
+                    case array('imprevs','imprevs'):
+                        if ($a_dateImp < $b_dateImp) {
+                            return -1;
+                        }else if($a_dateImp > $b_dateImp){
+                            return 1;
+                        }else{
+                            return 0;
+                        }
+                        break;
+                    case array('remrevs','remrevs'):
+                        if ($params_a[2] < $params_b[2]) {
+                            return -1;
+                        }else if($params_a[2] > $params_b[2]){
+                            return 1;
+                        }else{
+                            return 0;
+                        }
+                        break;
                 }
             });
-        //rsort($return, SORT_NUMERIC);
+
+        
 
         return $return;
+
     }
 
     protected function _getLastRevisionRun()

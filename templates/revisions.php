@@ -15,7 +15,7 @@ foreach ($gitout as $key => $value) {
 }
 echo ' Branch: '.$branch;
 ?></h2>
-<?php 
+<?php
 
 if (isset($this->revisions) && count($this->revisions)) { ?>
 	<form method="post" action="" class="nomargin" id="revisions">
@@ -37,15 +37,20 @@ if (isset($this->revisions) && count($this->revisions)) { ?>
 
 				foreach ($this->revisions as $revision) { 
 
-						$revLastSaved = array_key_exists($revision, $lastSaved);
+						//$revLastSaved = array_key_exists($revision, $lastSaved);
 
 						$rev_arr = explode("_", $revision);
+						
+						$revsName = array_map(function($a){
+								$b = (array) $a;
+								return $b['name'];
+							}, $this->impRevs);
 
-						if(count($rev_arr) < 3){
-							continue;
+						if (in_array($revision, $revsName)) {
+							$ran = true;
+						}else{
+							$ran = false;
 						}
-
-						$ran = (count($rev_arr) == 4);
 						
 						if ($ran) {
 							$class = 'ran';
@@ -77,7 +82,7 @@ if (isset($this->revisions) && count($this->revisions)) { ?>
 												if (count($rev_arr) < 4) {
 												?>
 
-												<button data-role="editor-save" data-revision="<?php echo $revision; ?>" data-file="<?php echo $file; ?>" type="button" class="btn btn-mini btn-info pull-right" style="margin-top: -1px;"><?php echo __('Save file') ?></button>
+												<button data-role="editor-save" data-revision="<?php echo $revision; ?>" data-file="<?php echo $file; ?>" type="button" class="btn btn-mini btn-info pull-right" style="margin-top: -1px;" <?php if($ran){echo 'disabled';} ?> ><?php echo __('Save file') ?></button>
 
 												<?php
 												}

@@ -3,29 +3,14 @@
 /*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
 DELIMITER /*!*/;
 # at 4
-#161101 23:50:06 server id 1  end_log_pos 120 CRC32 0xad58595d 	Start: binlog v 4, server v 5.6.33-log created 161101 23:50:06 at startup
+#161102 23:58:34 server id 1  end_log_pos 120 CRC32 0xc8ff26d2 	Start: binlog v 4, server v 5.6.33-log created 161102 23:58:34 at startup
 # Warning: this binlog is either in use or was not closed properly.
 ROLLBACK/*!*/;
 BINLOG '
-HhwZWA8BAAAAdAAAAHgAAAABAAQANS42LjMzLWxvZwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAeHBlYEzgNAAgAEgAEBAQEEgAAXAAEGggAAAAICAgCAAAACgoKGRkAAV1Z
-WK0=
+mm8aWA8BAAAAdAAAAHgAAAABAAQANS42LjMzLWxvZwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAACabxpYEzgNAAgAEgAEBAQEEgAAXAAEGggAAAAICAgCAAAACgoKGRkAAdIm
+/8g=
 '/*!*/;
-# at 305
-#161102  1:05:03 server id 1  end_log_pos 476 CRC32 0x6baaed05 	Query	thread_id=6	exec_time=0	error_code=0
-use `abacus`/*!*/;
-SET TIMESTAMP=1478045103/*!*/;
-SET @@session.pseudo_thread_id=6/*!*/;
-SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
-SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
-/*!\C utf8 *//*!*/;
-SET @@session.character_set_client=33,@@session.collation_connection=33,@@session.collation_server=33/*!*/;
-SET @@session.lc_time_names=0/*!*/;
-SET @@session.collation_database=DEFAULT/*!*/;
-ALTER TABLE `abacus`.`historico` 
-ADD COLUMN `outra2` VARCHAR(45) NOT NULL AFTER `testeoutra`
-/*!*/;
 DELIMITER ;
 # End of log file
 ROLLBACK /* added by mysqlbinlog */;
